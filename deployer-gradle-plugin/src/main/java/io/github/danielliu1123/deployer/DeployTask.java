@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -50,22 +51,26 @@ public class DeployTask extends DefaultTask {
     }
 
     private void deploy() throws Exception {
-        Path dirPath = extension.getDir().getAsFile().get().toPath();
+        List<Path> dirPaths = extension.getDirs().get().stream()
+                .map(dir -> dir.getAsFile().get().toPath())
+                .toList();
 
-        // Use gpg to sign all files
-        try {
-            GpgSigner.signDirectory(
-                    dirPath,
-                    extension.getSign().getSecretKey().get(),
-                    extension.getSign().getPassphrase().get());
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to sign artifacts in directory: " + dirPath, e);
+        // Use gpg to sign all files in each directory
+        for (Path dirPath : dirPaths) {
+            try {
+                GpgSigner.signDirectory(
+                        dirPath,
+                        extension.getSign().getSecretKey().get(),
+                        extension.getSign().getPassphrase().get());
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to sign artifacts in directory: " + dirPath, e);
+            }
         }
 
         // package artifacts into a zip file
         var bundleName = "%s-%s-bundle.zip".formatted(projectDir.getName(), version);
         var bundlePath = Path.of(projectDir.getAbsolutePath(), bundleName);
-        File zipFile = zipArtifacts(dirPath, bundlePath);
+        File zipFile = createBundle(dirPaths, bundlePath);
 
         System.out.println("Deploy bundle: " + zipFile.getName());
 
@@ -120,32 +125,34 @@ public class DeployTask extends DefaultTask {
         return Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static File zipArtifacts(Path path, Path zipFilePath) {
-        if (!Files.isDirectory(path)) {
-            throw new IllegalArgumentException("The provided path is not a directory: " + path);
+    private static File createBundle(List<Path> paths, Path zipFilePath) {
+        for (Path path : paths) {
+            if (!Files.isDirectory(path)) {
+                throw new IllegalArgumentException("The provided path is not a directory: " + path);
+            }
         }
 
-        File dir = path.toFile();
-
-        // package all files in dir into a zip file
+        // package all files from all directories into a single zip file
         File zipFile = zipFilePath.toFile();
         if (zipFile.exists() && !zipFile.delete()) {
             throw new IllegalStateException("Failed to delete existing zip file: " + zipFile);
         }
 
         try (var zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile))) {
-            Files.walkFileTree(dir.toPath(), new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    var zipEntry = new ZipEntry(dir.toPath().relativize(file).toString());
-                    zipOutputStream.putNextEntry(zipEntry);
-                    Files.copy(file, zipOutputStream);
-                    zipOutputStream.closeEntry();
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+            for (Path path : paths) {
+                Files.walkFileTree(path, new SimpleFileVisitor<>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        var zipEntry = new ZipEntry(path.relativize(file).toString());
+                        zipOutputStream.putNextEntry(zipEntry);
+                        Files.copy(file, zipOutputStream);
+                        zipOutputStream.closeEntry();
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+            }
         } catch (IOException e) {
-            throw new RuntimeException("Failed to zip artifacts in directory: " + dir, e);
+            throw new RuntimeException("Failed to zip artifacts from directories", e);
         }
         return zipFile;
     }

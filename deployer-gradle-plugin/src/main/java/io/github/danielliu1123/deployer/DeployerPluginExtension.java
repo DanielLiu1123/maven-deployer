@@ -4,6 +4,7 @@ import org.gradle.api.Action;
 import org.gradle.api.Project;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 
 /**
@@ -12,7 +13,7 @@ import org.gradle.api.provider.Property;
  */
 public abstract class DeployerPluginExtension {
 
-    private final DirectoryProperty dir;
+    private final ListProperty<DirectoryProperty> dirs;
     private final Property<String> username;
     private final Property<String> password;
     private final Property<PublishingType> publishingType;
@@ -20,15 +21,15 @@ public abstract class DeployerPluginExtension {
 
     public DeployerPluginExtension(Project project) {
         ObjectFactory objects = project.getObjects();
-        this.dir = objects.directoryProperty();
+        this.dirs = objects.listProperty(DirectoryProperty.class);
         this.username = objects.property(String.class);
         this.password = objects.property(String.class);
         this.publishingType = objects.property(PublishingType.class).convention(PublishingType.USER_MANAGED);
         this.sign = objects.newInstance(Sign.class);
     }
 
-    public DirectoryProperty getDir() {
-        return dir;
+    public ListProperty<DirectoryProperty> getDirs() {
+        return dirs;
     }
 
     public Property<String> getUsername() {

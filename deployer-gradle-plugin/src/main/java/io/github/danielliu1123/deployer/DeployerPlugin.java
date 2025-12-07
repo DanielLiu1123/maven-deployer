@@ -18,7 +18,7 @@ public class DeployerPlugin implements Plugin<Project> {
                 .register("deploy", DeployTask.class, project, extension)
                 .configure(task -> {
                     task.setGroup("publishing");
-                    task.setDescription("Deploys %s to the Maven central.".formatted(extension.getDir()));
+                    task.setDescription("Deploys specified dirs to Maven central.");
                 });
     }
 }
