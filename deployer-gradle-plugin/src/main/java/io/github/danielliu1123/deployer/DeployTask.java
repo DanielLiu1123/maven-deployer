@@ -51,9 +51,8 @@ public class DeployTask extends DefaultTask {
     }
 
     private void deploy() throws Exception {
-        List<Path> dirPaths = extension.getDirs().get().stream()
-                .map(e -> e.getAsFile().toPath())
-                .toList();
+        List<Path> dirPaths =
+                extension.getDirs().get().stream().map(File::toPath).toList();
         if (dirPaths.isEmpty()) {
             System.out.println("No dirs configured for deploying. Skipping.");
             return;
