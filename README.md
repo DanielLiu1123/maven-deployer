@@ -1,6 +1,6 @@
 # Maven Deployer
 
-A Gradle plugin that provides a unified way to upload artifacts to Maven Central.
+A Gradle plugin that provides a unified (single) way to upload artifacts to Maven Central.
 
 ## Quick Start
 

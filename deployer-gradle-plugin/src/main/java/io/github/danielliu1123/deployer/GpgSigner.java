@@ -15,6 +15,9 @@ final class GpgSigner {
             throw new IllegalArgumentException("Path is not a directory: " + dir);
         }
 
+        // Check if GPG is available
+        checkGpgAvailability();
+
         // 1. create temporary GNUPGHOME
         Path gnupgHome = Files.createTempDirectory("gnupg-home");
         Files.createDirectories(gnupgHome.resolve("private-keys-v1.d"));
@@ -99,6 +102,26 @@ final class GpgSigner {
         }
 
         return output;
+    }
+
+    private static void checkGpgAvailability() throws Exception {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("gpg", "--version");
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
+            int exit = p.waitFor();
+
+            if (exit != 0) {
+                throw new RuntimeException("GPG is required for signing artifacts but is not properly configured. "
+                        + "Please install GPG and ensure it's available in your PATH.");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "GPG is required for signing artifacts but was not found. "
+                            + "Please install GPG (GnuPG) and ensure it's available in your PATH. "
+                            + "Visit https://gnupg.org/download/ for installation instructions.",
+                    e);
+        }
     }
 
     private static void deleteRecursively(Path path) throws IOException {
