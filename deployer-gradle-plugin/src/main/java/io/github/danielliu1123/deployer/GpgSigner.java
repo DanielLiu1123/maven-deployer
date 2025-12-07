@@ -38,13 +38,13 @@ final class GpgSigner {
                 .orElseThrow(() -> new RuntimeException("Failed to get key fingerprint"));
 
         // 5. sign all relevant files in the directory
+        System.out.println("Signing files in dir: " + dir);
         try (var stream = Files.walk(dir)) {
             stream.filter(Files::isRegularFile)
                     .filter(e -> e.toString().endsWith(".jar")
                             || e.toString().endsWith(".pom")
                             || e.toString().endsWith(".xml")
-                            || e.toString().endsWith(".module")
-                            || e.toString().endsWith(".json"))
+                            || e.toString().endsWith(".module"))
                     .forEach(file -> {
                         try {
                             signFile(gnupgHome, file, fingerprint, passphrase);
@@ -60,8 +60,6 @@ final class GpgSigner {
 
     private static void signFile(Path gnupgHome, Path file, String fingerprint, String passphrase) throws Exception {
         Path asc = file.resolveSibling(file.getFileName() + ".asc");
-
-        System.out.println("Signing: " + file);
 
         List<String> cmd = List.of(
                 "gpg",
