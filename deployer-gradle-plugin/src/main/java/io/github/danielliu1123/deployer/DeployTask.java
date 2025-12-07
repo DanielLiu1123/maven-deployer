@@ -51,9 +51,8 @@ public class DeployTask extends DefaultTask {
     }
 
     private void deploy() throws Exception {
-        List<Path> dirPaths = extension.getDirs().get().stream()
-                .map(dir -> dir.getAsFile().get().toPath())
-                .toList();
+        List<Path> dirPaths =
+                extension.getDirs().get().stream().map(File::toPath).toList();
 
         // Use gpg to sign all files in each directory
         for (Path dirPath : dirPaths) {
