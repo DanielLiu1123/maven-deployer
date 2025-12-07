@@ -1,14 +1,18 @@
 plugins {
     id "java-gradle-plugin"
+    id "com.gradle.plugin-publish" version "2.0.0"
 }
 
-description = "Deploying artifacts to Maven Central"
-
 gradlePlugin {
+    website = "https://github.com/DanielLiu1123/maven-deployer"
+    vcsUrl = "https://github.com/DanielLiu1123/maven-deployer.git"
     plugins {
-        deployer {
+        register("deployerPlugin") {
             id = "io.github.danielliu1123.deployer"
-            implementationClass = "deployer.DeployerPlugin"
+            implementationClass = "io.github.danielliu1123.deployer.DeployerPlugin"
+            displayName = "Maven deployer Gradle plugin"
+            description = "Deploying artifacts to Maven Central easily"
+            tags.set(["maven", "deploy"])
         }
     }
 }
@@ -16,3 +20,5 @@ gradlePlugin {
 dependencies {
     implementation gradleApi()
 }
+
+apply from: "${rootDir}/gradle/deploy.gradle"

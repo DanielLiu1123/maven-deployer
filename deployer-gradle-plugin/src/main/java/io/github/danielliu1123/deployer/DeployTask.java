@@ -1,4 +1,4 @@
-package deployer;
+package io.github.danielliu1123.deployer;
 
 import java.io.File;
 import java.io.FileOutputStream;

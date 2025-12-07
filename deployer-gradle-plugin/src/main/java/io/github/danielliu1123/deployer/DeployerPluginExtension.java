@@ -1,4 +1,4 @@
-package deployer;
+package io.github.danielliu1123.deployer;
 
 import org.gradle.api.Action;
 import org.gradle.api.Project;

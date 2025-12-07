@@ -1,4 +1,4 @@
-package deployer;
+package io.github.danielliu1123.deployer;
 
 /**
  * Publishing type for uploading deployment bundles to Maven Central.
