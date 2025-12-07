@@ -48,7 +48,7 @@ public class DeployTask extends DefaultTask {
         System.out.println("Deploying version: " + version + " (isSnapshot=" + isSnapshot + ")");
 
         if (isSnapshot) {
-            System.out.println("Deploying snapshot is delegated to 'publishMavenPublicationToMavenRepository' task.");
+            System.out.println("Please use maven-publish's 'publish' task for snapshot deployment. Skipping.");
             return;
         }
 
@@ -105,7 +105,7 @@ public class DeployTask extends DefaultTask {
         byte[] bodyBytes = createMultipartBody(partHeaders, fileBytes, endBoundary);
 
         var url = isSnapshot
-                ? "https://central.sonatype.com/repository/maven-snapshots"
+                ? "https://central.sonatype.com/repository/maven-snapshots" // Never happen for now
                 : "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
                         .formatted(getPublishingType().name());
 
