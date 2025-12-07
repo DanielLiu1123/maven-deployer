@@ -47,6 +47,11 @@ public class DeployTask extends DefaultTask {
     public void run() throws Exception {
         System.out.println("Deploying version: " + version + " (isSnapshot=" + isSnapshot + ")");
 
+        if (isSnapshot) {
+            System.out.println("Deploying snapshot is delegated to 'publishMavenPublicationToMavenRepository' task.");
+            return;
+        }
+
         deploy();
     }
 
