@@ -45,7 +45,7 @@ public class DeployTask extends DefaultTask {
 
     @TaskAction
     public void run() throws Exception {
-        System.out.println("Deploying version: " + version + " (isSnapshot=" + isSnapshot + ")");
+        System.out.println("Deploying version: " + version);
 
         if (isSnapshot) {
             System.out.println("Please use maven-publish's 'publish' task for snapshot deployment. Skipping.");
@@ -68,24 +68,12 @@ public class DeployTask extends DefaultTask {
             System.out.println("  - " + dirPath);
         }
 
-        // Use gpg to sign all files in each directory
-        for (Path dirPath : dirPaths) {
-            try {
-                GpgSigner.signDirectory(
-                        dirPath,
-                        extension.getSign().getSecretKey().get(),
-                        extension.getSign().getPassphrase().get());
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to sign artifacts in directory: " + dirPath, e);
-            }
-        }
-
         // package artifacts into a zip file
         var bundleName = "%s-%s-bundle.zip".formatted(projectDir.getName(), version);
         var bundlePath = Path.of(projectDir.getAbsolutePath(), bundleName);
         File zipFile = createBundle(dirPaths, bundlePath);
 
-        System.out.println("Deploy bundle: " + zipFile.getName());
+        System.out.println("Deploy bundle: " + zipFile.getAbsolutePath());
 
         doDeploy(zipFile);
     }
@@ -104,10 +92,8 @@ public class DeployTask extends DefaultTask {
 
         byte[] bodyBytes = createMultipartBody(partHeaders, fileBytes, endBoundary);
 
-        var url = isSnapshot
-                ? "https://central.sonatype.com/repository/maven-snapshots" // Never happen for now
-                : "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
-                        .formatted(getPublishingType().name());
+        var url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
+                .formatted(getPublishingType().name());
 
         System.out.println("Deploying to URL: " + url);
 
