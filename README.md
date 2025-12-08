@@ -32,7 +32,7 @@ Maven Central lacks an official Gradle deployment plugin. This plugin provides a
 
 **Key difference**: Snapshot and release deployments follow different workflows:
 - **Snapshots**: Direct upload via `maven-publish` plugin with credentials
-- **Releases**: Stage artifacts locally → Sign with GPG → Upload bundle via API (requires GPG key)
+- **Releases**: Stage artifacts locally (Sign with GPG) → Upload bundle via API
 
 ## Configuration
 
@@ -41,6 +41,7 @@ Create `gradle/deploy.gradle` in your project root:
 ```groovy
 apply plugin: "java-library"
 apply plugin: "maven-publish"
+apply plugin: "signing"
 
 java {
     withSourcesJar()
@@ -68,6 +69,18 @@ publishing {
         }
     }
 }
+
+signing {
+    if (!version.toString().endsWith('-SNAPSHOT')) {
+        def secretKey = System.getenv("GPG_SECRET_KEY")
+        def passphrase = System.getenv("GPG_PASSPHRASE")
+        if (secretKey == null || passphrase == null) {
+            throw new GradleException("Need to set GPG_SECRET_KEY and GPG_PASSPHRASE environment variables for signing.")
+        }
+        useInMemoryPgpKeys(secretKey, passphrase)
+        sign publishing.publications.maven
+    }
+}
 ```
 
 Apply to modules you want to publish:
@@ -90,13 +103,13 @@ export MAVENCENTRAL_PASSWORD=your_password
 
 ```shell
 # Step 1: Stage artifacts
+export GPG_SECRET_KEY=$(< path/to/private.gpg)
+export GPG_PASSPHRASE=your_passphrase
 ./gradlew publish -Pversion=1.0.0
 
 # Step 2: Sign and upload to Maven Central
 export MAVENCENTRAL_USERNAME=your_username
 export MAVENCENTRAL_PASSWORD=your_password
-export GPG_SECRET_KEY=$(< path/to/private.gpg)
-export GPG_PASSPHRASE=your_passphrase
 ./gradlew deploy -Pversion=1.0.0
 ```
 
