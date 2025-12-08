@@ -19,10 +19,6 @@ deploy {
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
     publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
-    sign {
-        secretKey = System.getenv("GPG_SECRET_KEY")
-        passphrase = System.getenv("GPG_PASSPHRASE")
-    }
 }
 ```
 
