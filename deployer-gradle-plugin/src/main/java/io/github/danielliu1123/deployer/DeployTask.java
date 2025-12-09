@@ -31,27 +31,16 @@ import org.gradle.api.tasks.TaskAction;
 public class DeployTask extends DefaultTask {
 
     private final DeployerPluginExtension extension;
-    private final String version;
-    private final boolean isSnapshot;
     private final File projectDir;
 
     @Inject
     public DeployTask(Project project, DeployerPluginExtension extension) {
         this.extension = extension;
-        this.version = project.getVersion().toString();
-        this.isSnapshot = version.endsWith("-SNAPSHOT");
         this.projectDir = project.getProjectDir();
     }
 
     @TaskAction
     public void run() throws Exception {
-        System.out.println("Deploying version: " + version);
-
-        if (isSnapshot) {
-            System.out.println("Please use maven-publish's 'publish' task for snapshot deployment. Skipping.");
-            return;
-        }
-
         deploy();
     }
 
@@ -69,7 +58,7 @@ public class DeployTask extends DefaultTask {
         }
 
         // package artifacts into a zip file
-        var bundleName = "%s-%s-bundle.zip".formatted(projectDir.getName(), version);
+        var bundleName = "%s-bundle.zip".formatted(projectDir.getName());
         var bundlePath = Path.of(projectDir.getAbsolutePath(), bundleName);
         File zipFile = createBundle(dirPaths, bundlePath);
 

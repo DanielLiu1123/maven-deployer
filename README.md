@@ -106,7 +106,7 @@ export GPG_PASSPHRASE=your_passphrase
 # Step 2: Sign and upload to Maven Central
 export MAVENCENTRAL_USERNAME=your_username
 export MAVENCENTRAL_PASSWORD=your_password
-./gradlew deploy -Pversion=1.0.0
+./gradlew deploy
 ```
 
 ### GitHub Actions Setup
