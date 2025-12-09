@@ -17,4 +17,8 @@ gradlePlugin {
     }
 }
 
+dependencies {
+    testImplementation gradleTestKit()
+}
+
 apply from: "${rootDir}/gradle/deploy.gradle"
