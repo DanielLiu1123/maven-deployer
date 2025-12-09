@@ -17,8 +17,4 @@ gradlePlugin {
     }
 }
 
-dependencies {
-    implementation gradleApi()
-}
-
 apply from: "${rootDir}/gradle/deploy.gradle"

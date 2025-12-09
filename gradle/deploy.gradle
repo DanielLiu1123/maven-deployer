@@ -47,53 +47,13 @@ publishing {
                     developerConnection = "scm:git:ssh@${githubUrl.get().substring(8)}.git"
                     url = "${githubUrl.get()}"
                 }
-                // Capture optional dependencies at configuration time for Configuration Cache compatibility
-                def optionalDeps = getDependencies("optional")
-                def providedDeps = getDependencies("provided")
-                withXml {
-                    // Generate optional dependencies for optional configuration
-                    def dependencies = asNode().dependencies[0] ?: asNode().appendNode("dependencies")
-                    for (dep in optionalDeps) {
-                        def dependency = dependencies.appendNode("dependency")
-                        dependency.appendNode("groupId", dep.group)
-                        dependency.appendNode("artifactId", dep.name)
-                        dependency.appendNode("version", dep.version)
-                        dependency.appendNode("optional", "true")
-                    }
-                    for (dep in providedDeps) {
-                        def dependency = dependencies.appendNode("dependency")
-                        dependency.appendNode("groupId", dep.group)
-                        dependency.appendNode("artifactId", dep.name)
-                        dependency.appendNode("version", dep.version)
-                        dependency.appendNode("scope", "provided")
-                    }
-                }
             }
         }
     }
 
     repositories {
         maven {
-            url = layout.buildDirectory.dir("local-repo")
+            url = layout.buildDirectory.dir("repo")
         }
     }
-}
-
-def getDependencies(String configurationName) {
-    def result = []
-    def cfg = project.configurations.findByName(configurationName)
-    if (cfg == null) return result
-
-    def resolvedDeps = cfg.resolvedConfiguration.resolvedArtifacts
-            .stream()
-            .map(e -> e.moduleVersion.id)
-            .collect(java.util.stream.Collectors.toMap(dep -> dep.group + ":" + dep.name, dep -> dep.version, (o, n) -> o))
-
-    for (dep in cfg.allDependencies) {
-        def version = resolvedDeps[dep.group + ":" + dep.name]
-        if (dep.group && dep.name && version) {
-            result.add([group: dep.group, name: dep.name, version: version])
-        }
-    }
-    return result
 }
