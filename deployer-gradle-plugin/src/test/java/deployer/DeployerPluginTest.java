@@ -10,11 +10,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- *
- *
- * @author Freeman
- */
 class DeployerPluginTest {
 
     @TempDir
@@ -59,5 +54,42 @@ class DeployerPluginTest {
                 .build();
 
         assertThat(result.getOutput()).contains("BUILD SUCCESSFUL");
+    }
+
+    @Test
+    void testDeployConfigTask() throws Exception {
+        String settingsGradleContent = """
+                rootProject.name = "deployer-test-deploy-configuration"
+                """;
+        String buildGradleContent = """
+                plugins {
+                    id 'io.github.danielliu1123.deployer'
+                }
+
+                deploy {
+                    dirs = [ file("artifacts") ]
+                    username = "testuser"
+                    password = "testpassword"
+                    publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
+                }
+                """;
+
+        Files.writeString(settingsFile.toPath(), settingsGradleContent);
+        Files.writeString(buildFile.toPath(), buildGradleContent);
+
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(rootDir)
+                .withPluginClasspath()
+                .forwardOutput()
+                .withDebug(true)
+                .withArguments("deployConfig")
+                .build();
+
+        assertThat(result.getOutput())
+                .contains("Deployer Plugin Config:")
+                .contains("dirs:")
+                .contains("publishingType: AUTOMATIC")
+                .doesNotContain("username")
+                .doesNotContain("password");
     }
 }

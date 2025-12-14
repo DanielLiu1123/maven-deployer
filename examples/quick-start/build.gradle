@@ -1,8 +1,19 @@
+plugins {
+    id "io.github.danielliu1123.deployer" version "+"
+}
+
 group = "com.example"
 description = "A quick start example for maven-deployer"
 
 dependencies {
     api "org.apache.commons:commons-lang3:+"
+}
+
+deploy {
+    dirs.add(file("${project.layout.buildDirectory}/libs"))
+    username = System.getenv("MAVENCENTRAL_USERNAME")
+    password = System.getenv("MAVENCENTRAL_PASSWORD")
+    publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
 }
 
 apply from: "${rootDir}/gradle/deploy.gradle"
