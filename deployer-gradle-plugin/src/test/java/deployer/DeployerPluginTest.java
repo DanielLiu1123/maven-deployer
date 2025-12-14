@@ -87,9 +87,9 @@ class DeployerPluginTest {
 
         assertThat(result.getOutput())
                 .contains("Deployer Plugin Config:")
-                .contains("dirs:")
-                .contains("publishingType: AUTOMATIC")
-                .doesNotContain("username")
-                .doesNotContain("password");
+                .contains("\"dirs\": [")
+                .contains("\"username\": \"****\"")
+                .contains("\"password\": \"****\"")
+                .contains("\"publishingType\": \"AUTOMATIC\"");
     }
 }

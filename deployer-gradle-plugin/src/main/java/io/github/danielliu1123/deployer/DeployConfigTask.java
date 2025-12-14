@@ -1,7 +1,5 @@
 package io.github.danielliu1123.deployer;
 
-import java.io.File;
-import java.util.Collections;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.tasks.TaskAction;
 
@@ -16,11 +14,6 @@ public class DeployConfigTask extends DefaultTask {
         }
 
         getLogger().lifecycle("Deployer Plugin Config:");
-        getLogger().lifecycle("  dirs:");
-        for (File dir : extension.getDirs().getOrElse(Collections.emptyList())) {
-            getLogger().lifecycle("    - {}", dir.getAbsolutePath());
-        }
-        getLogger()
-                .lifecycle("  publishingType: {}", extension.getPublishingType().getOrNull());
+        getLogger().lifecycle(extension.toString());
     }
 }
