@@ -1,0 +1,8 @@
+group = "com.example"
+description = "A quick start example for maven-deployer"
+
+dependencies {
+    api "org.apache.commons:commons-lang3:+"
+}
+
+apply from: "${rootDir}/gradle/deploy.gradle"

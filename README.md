@@ -8,14 +8,12 @@ Apply the plugin to your _root_ `build.gradle`:
 
 ```groovy
 plugins {
-    id "io.github.danielliu1123.deployer" version "<latest>"
+    id "io.github.danielliu1123.deployer" version "+"
 }
 
 deploy {
-    // dirs to sign and upload 
-    dirs.set(provider {
-        subprojects.collect { e -> e.layout.buildDirectory.dir("repo").get().getAsFile() }
-    })
+    // dirs to upload
+    dirs = subprojects.collect { e -> e.layout.buildDirectory.dir("repo").get().getAsFile() }
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
     publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
@@ -46,9 +44,11 @@ java {
 
 publishing {
     publications {
-        maven(MavenPublication) {
+        register("maven", MavenPublication) {
             from components.java
         }
+        
+        // Add POM metadata, license, developers, scm, etc.
     }
 
     repositories {

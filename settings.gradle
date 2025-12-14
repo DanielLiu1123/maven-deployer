@@ -2,6 +2,8 @@ rootProject.name = "maven-deployer"
 
 include(":deployer-gradle-plugin")
 
+include(":examples:quick-start")
+
 // Auto install git hooks
 java.util.Optional.of(new File("${rootDir}/.git/hooks")).filter { it.exists() && it.isDirectory() }.ifPresent {
     new File("${rootDir}/.githooks").eachFile(groovy.io.FileType.FILES) {
