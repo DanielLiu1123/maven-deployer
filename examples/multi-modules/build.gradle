@@ -3,17 +3,11 @@ plugins {
 }
 
 group = "com.example"
-description = "A quick start example for maven-deployer"
-
-dependencies {
-    api "org.apache.commons:commons-lang3:+"
-}
+description = "Multi-modules example for maven-deployer"
 
 deploy {
-    dirs = [ file("${project.layout.buildDirectory}/repo") ]
+    dirs = subprojects.collect { it.layout.buildDirectory.dir("repo").get().getAsFile() }
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
     publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
 }
-
-apply from: "${rootDir}/gradle/deploy.gradle"

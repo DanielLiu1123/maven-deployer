@@ -2,6 +2,8 @@ rootProject.name = "maven-deployer"
 
 include(":deployer-gradle-plugin")
 
+include(":examples:multi-modules:module1")
+include(":examples:multi-modules:module2")
 include(":examples:quick-start")
 
 // Auto install git hooks
