@@ -1,6 +1,11 @@
 # Maven Deployer
 
-A Gradle plugin that provides a unified (single) way to upload artifacts to Maven Central.
+Maven Central lacks an official Gradle deployment plugin. 
+This plugin provides an opinionated, streamlined solution based on proven deployment practices.
+
+Publish snapshot and release follow different workflows:
+- **Snapshots**: Direct upload via `maven-publish` plugin with credentials
+- **Releases**: Stage artifacts locally (Sign with GPG) → Upload bundle via [Publisher API](https://central.sonatype.org/publish/publish-portal-api/)
 
 ## Quick Start
 
@@ -12,7 +17,7 @@ plugins {
 }
 
 deploy {
-    // dirs to upload
+    // dirs to upload, they will all be packaged into one bundle
     dirs = subprojects.collect { e -> e.layout.buildDirectory.dir("repo").get().getAsFile() }
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
@@ -20,17 +25,7 @@ deploy {
 }
 ```
 
-## Overview
-
-Maven Central lacks an official Gradle deployment plugin. This plugin provides an opinionated, streamlined solution based on proven deployment practices.
-
-**Key difference**: Snapshot and release deployments follow different workflows:
-- **Snapshots**: Direct upload via `maven-publish` plugin with credentials
-- **Releases**: Stage artifacts locally (Sign with GPG) → Upload bundle via API
-
-## Configuration
-
-Create `gradle/deploy.gradle` in your project root:
+Create `${rootDir}/gradle/deploy.gradle`:
 
 ```groovy
 apply plugin: "java-library"
@@ -47,7 +42,6 @@ publishing {
         register("maven", MavenPublication) {
             from components.java
         }
-        
         // Add POM metadata, license, developers, scm, etc.
     }
 
@@ -82,8 +76,6 @@ Apply to modules you want to publish:
 apply from: "${rootDir}/gradle/deploy.gradle"
 ```
 
-## Usage
-
 ### Deploy Snapshot
 
 ```shell
@@ -106,7 +98,7 @@ export MAVENCENTRAL_PASSWORD=your_password
 ./gradlew deploy
 ```
 
-### GitHub Actions Setup
+## GitHub Actions Setup
 
 ```shell
 gh secret set MAVENCENTRAL_USERNAME --body "your_username"
@@ -117,8 +109,8 @@ gh secret set GPG_PASSPHRASE --body "your_passphrase"
 
 ## Examples
 
-- [Quick Start Example](examples/quick-start/README.md)
-- [Multi Modules Example](examples/multi-modules/README.md)
+- [Quick Start](examples/quick-start/README.md)
+- [Multi Modules](examples/multi-modules/README.md)
 
 ## License
 
