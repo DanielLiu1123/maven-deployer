@@ -18,11 +18,6 @@ public class DeployConfigTask extends DefaultTask {
 
     @TaskAction
     public void print() {
-        if (extension == null) {
-            logger.warn("Deployer plugin extension not found.");
-            return;
-        }
-
         logger.lifecycle("Deployer Plugin Config:");
         logger.lifecycle(extension.toString());
     }
