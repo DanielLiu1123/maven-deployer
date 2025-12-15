@@ -70,9 +70,6 @@ signing {
     if (!version.toString().endsWith('-SNAPSHOT')) {
         def secretKey = System.getenv("GPG_SECRET_KEY")
         def passphrase = System.getenv("GPG_PASSPHRASE")
-        if (secretKey == null || passphrase == null) {
-            throw new GradleException("Need to set GPG_SECRET_KEY and GPG_PASSPHRASE environment variables for signing.")
-        }
         useInMemoryPgpKeys(secretKey, passphrase)
         sign publishing.publications.maven
     }
@@ -117,6 +114,11 @@ gh secret set MAVENCENTRAL_PASSWORD --body "your_password"
 gh secret set GPG_SECRET_KEY < path/to/private.gpg
 gh secret set GPG_PASSPHRASE --body "your_passphrase"
 ```
+
+## Examples
+
+- [Quick Start Example](examples/quick-start/README.md)
+- [Multi Modules Example](examples/multi-modules/README.md)
 
 ## License
 
