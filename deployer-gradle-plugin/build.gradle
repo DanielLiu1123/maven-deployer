@@ -11,7 +11,7 @@ gradlePlugin {
             id = "io.github.danielliu1123.deployer"
             implementationClass = "io.github.danielliu1123.deployer.DeployerPlugin"
             displayName = "Maven deployer Gradle plugin"
-            description = "Deploying artifacts to Maven Central easily"
+            description = "Maven Deployer helps you to deploy artifacts to Maven Central with absolute minimum fuss."
             tags.set(["maven", "deploy"])
         }
     }
