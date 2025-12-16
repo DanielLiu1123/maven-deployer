@@ -6,7 +6,10 @@ group = "com.example"
 description = "Multi-modules example for maven-deployer"
 
 deploy {
-    dirs = subprojects.collect { it.layout.buildDirectory.dir("repo").get().getAsFile() }
+    dirs = subprojects.stream()
+            .map(e -> e.layout.buildDirectory.dir("repo").get().getAsFile())
+            .filter(e -> e.exists())
+            .toList()
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
     publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
