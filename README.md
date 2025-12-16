@@ -47,7 +47,7 @@ publishing {
 
     repositories {
         maven {
-            if (project.version.toString().endsWith("-SNAPSHOT")) {
+            if (version.toString().endsWith("-SNAPSHOT")) {
                 url = "https://central.sonatype.com/repository/maven-snapshots"
                 credentials {
                     username = System.getenv("MAVENCENTRAL_USERNAME")
