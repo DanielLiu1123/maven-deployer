@@ -223,7 +223,7 @@ public class DeployTask extends DefaultTask {
             logger.lifecycle("  [" + attempts + "] Current state: " + state);
 
             switch (state) {
-                case PENDING, PUBLISHING, VALIDATED, VALIDATING -> Thread.sleep(pollIntervalSeconds * 1000L);
+                case PENDING, VALIDATING, VALIDATED, PUBLISHING -> Thread.sleep(pollIntervalSeconds * 1000L);
                 case PUBLISHED -> {
                     logger.lifecycle("\n✓ Deployment successfully PUBLISHED and available on Maven Central!");
                     return;
