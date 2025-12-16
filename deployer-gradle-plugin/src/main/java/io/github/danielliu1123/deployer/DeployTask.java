@@ -45,10 +45,6 @@ public class DeployTask extends DefaultTask {
     }
 
     @TaskAction
-    public void run() throws Exception {
-        deploy();
-    }
-
     private void deploy() throws Exception {
         List<Path> dirPaths =
                 extension.getDirs().get().stream().map(File::toPath).toList();
@@ -73,6 +69,28 @@ public class DeployTask extends DefaultTask {
     }
 
     private void doDeploy(File zipFile) throws Exception {
+        switch (getPublishingType()) {
+            case AUTOMATIC -> uploadBundle(zipFile, PublishingType.AUTOMATIC);
+            case USER_MANAGED -> uploadBundle(zipFile, PublishingType.USER_MANAGED);
+            case WAIT_FOR_PUBLISHED -> {
+                var resp = uploadBundle(zipFile, PublishingType.USER_MANAGED);
+                if (is2xx(resp.statusCode())) {
+                    String deploymentId = extractDeploymentId(resp.body());
+                    if (deploymentId != null && !deploymentId.isBlank()) {
+                        waitForPublished(deploymentId);
+                    } else {
+                        logger.lifecycle(
+                                "Warning: Could not extract deploymentId from response. Cannot wait for PUBLISHED status.");
+                    }
+                } else {
+                    logger.lifecycle("Warning: Upload failed with status " + resp.statusCode()
+                            + ". Cannot wait for PUBLISHED status.");
+                }
+            }
+        }
+    }
+
+    private HttpResponse<String> uploadBundle(File zipFile, PublishingType publishingType) throws Exception {
         // random boundary
         String boundary = "----JavaBoundary" + UUID.randomUUID();
 
@@ -86,14 +104,8 @@ public class DeployTask extends DefaultTask {
 
         byte[] bodyBytes = createMultipartBody(partHeaders, fileBytes, endBoundary);
 
-        // For WAIT_FOR_PUBLISHED, upload with USER_MANAGED and then poll status
-        PublishingType publishingType = getPublishingType();
-        String uploadPublishingType = publishingType == PublishingType.WAIT_FOR_PUBLISHED
-                ? PublishingType.USER_MANAGED.name()
-                : publishingType.name();
-
         var url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
-                .formatted(uploadPublishingType);
+                .formatted(publishingType.name());
 
         logger.lifecycle("Deploying to URL: " + url);
 
@@ -104,29 +116,19 @@ public class DeployTask extends DefaultTask {
                 .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
                 .build();
 
-        var httpClient = HttpClient.newHttpClient();
+        var httpClient = HttpClient.newBuilder().build();
+
         var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         logger.lifecycle("Response: ");
         logger.lifecycle("  status: " + response.statusCode());
         logger.lifecycle("  body: " + response.body());
         logger.lifecycle("  headers: " + response.headers().map());
+        return response;
+    }
 
-        // If WAIT_FOR_PUBLISHED, extract deploymentId and poll until PUBLISHED
-        if (publishingType == PublishingType.WAIT_FOR_PUBLISHED) {
-            if (response.statusCode() == 201) {
-                String deploymentId = extractDeploymentId(response.body());
-                if (deploymentId != null) {
-                    waitForPublished(httpClient, deploymentId);
-                } else {
-                    logger.lifecycle(
-                            "Warning: Could not extract deploymentId from response. Cannot wait for PUBLISHED status.");
-                }
-            } else {
-                logger.lifecycle("Warning: Upload failed with status " + response.statusCode()
-                        + ". Cannot wait for PUBLISHED status.");
-            }
-        }
+    private static boolean is2xx(int i) {
+        return i >= 200 && i < 300;
     }
 
     private PublishingType getPublishingType() {
@@ -185,30 +187,20 @@ public class DeployTask extends DefaultTask {
     }
 
     /**
-     * Extracts the deploymentId from the upload response body.
-     * Expected format: {"deploymentId":"uuid","deploymentName":"filename",...}
+     * see <a href="https://central.sonatype.org/publish/publish-portal-api/#uploading-a-deployment-bundle">Upload Bundle</a>
      */
-    private String extractDeploymentId(String responseBody) {
-        Pattern pattern = Pattern.compile("\"deploymentId\"\\s*:\\s*\"([^\"]+)\"");
-        Matcher matcher = pattern.matcher(responseBody);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        return null;
+    private static String extractDeploymentId(String responseBody) {
+        return responseBody;
     }
 
-    /**
-     * Polls the deployment status until it reaches PUBLISHED state.
-     * According to API docs, possible states are:
-     * PENDING, VALIDATING, VALIDATED, PUBLISHING, PUBLISHED, FAILED
-     */
-    private void waitForPublished(HttpClient httpClient, String deploymentId) throws Exception {
+    private void waitForPublished(String deploymentId) throws Exception {
         logger.lifecycle("\nWaiting for deployment to be PUBLISHED (deploymentId: " + deploymentId + ")...");
 
         String statusUrl = "https://central.sonatype.com/api/v1/publisher/status?id=" + deploymentId;
         int pollIntervalSeconds = 10;
         int maxAttempts = 1080; // 3 hours max (1080 * 10 seconds)
         int attempts = 0;
+        var httpClient = HttpClient.newBuilder().build();
 
         while (attempts < maxAttempts) {
             attempts++;
@@ -221,25 +213,27 @@ public class DeployTask extends DefaultTask {
 
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() != 200) {
-                logger.warn("Status check failed with code " + response.statusCode() + ": " + response.body());
+            if (!is2xx(response.statusCode())) {
+                logger.warn("Status check failed with code {}: {}", response.statusCode(), response.body());
                 Thread.sleep(pollIntervalSeconds * 1000L);
                 continue;
             }
 
-            String state = extractDeploymentState(response.body());
+            var state = extractDeploymentState(response.body());
             logger.lifecycle("  [" + attempts + "] Current state: " + state);
 
-            if ("PUBLISHED".equals(state)) {
-                logger.lifecycle("\n✓ Deployment successfully PUBLISHED and available on Maven Central!");
-                return;
-            } else if ("FAILED".equals(state)) {
-                logger.error("\n✗ Deployment FAILED. Response: {}", response.body());
-                throw new RuntimeException("Deployment failed with state: FAILED");
+            switch (state) {
+                case PENDING, PUBLISHING, VALIDATED, VALIDATING -> Thread.sleep(pollIntervalSeconds * 1000L);
+                case PUBLISHED -> {
+                    logger.lifecycle("\n✓ Deployment successfully PUBLISHED and available on Maven Central!");
+                    return;
+                }
+                case FAILED ->
+                    throw new IllegalStateException(
+                            "Deployment failed with state: FAILED, response: " + response.body());
+                case UNRECOGNIZED ->
+                    throw new IllegalStateException("Unrecognized deployment state. Response: " + response.body());
             }
-
-            // Continue polling for other states: PENDING, VALIDATING, VALIDATED, PUBLISHING
-            Thread.sleep(pollIntervalSeconds * 1000L);
         }
 
         throw new RuntimeException("Timeout waiting for deployment to be PUBLISHED after "
@@ -250,12 +244,29 @@ public class DeployTask extends DefaultTask {
      * Extracts the deploymentState from the status response body.
      * Expected format: {"deploymentId":"uuid","deploymentState":"STATE",...}
      */
-    private String extractDeploymentState(String responseBody) {
+    private DeploymentState extractDeploymentState(String responseBody) {
         Pattern pattern = Pattern.compile("\"deploymentState\"\\s*:\\s*\"([^\"]+)\"");
         Matcher matcher = pattern.matcher(responseBody);
         if (matcher.find()) {
-            return matcher.group(1);
+            var state = matcher.group(1);
+            try {
+                return DeploymentState.valueOf(state);
+            } catch (IllegalArgumentException e) {
+                logger.warn("Unrecognized deployment state: {}", state);
+                return DeploymentState.UNRECOGNIZED;
+            }
         }
-        return "UNKNOWN";
+        logger.warn("Could not extract deploymentState from response body: {}", responseBody);
+        return DeploymentState.UNRECOGNIZED;
+    }
+
+    enum DeploymentState {
+        PENDING,
+        VALIDATING,
+        VALIDATED,
+        PUBLISHING,
+        PUBLISHED,
+        FAILED,
+        UNRECOGNIZED
     }
 }
