@@ -73,7 +73,7 @@ public class DeployTask extends DefaultTask {
             case AUTOMATIC -> uploadBundle(zipFile, PublishingType.AUTOMATIC);
             case USER_MANAGED -> uploadBundle(zipFile, PublishingType.USER_MANAGED);
             case WAIT_FOR_PUBLISHED -> {
-                var resp = uploadBundle(zipFile, PublishingType.USER_MANAGED);
+                var resp = uploadBundle(zipFile, PublishingType.AUTOMATIC);
                 if (is2xx(resp.statusCode())) {
                     String deploymentId = extractDeploymentId(resp.body());
                     if (deploymentId != null && !deploymentId.isBlank()) {
