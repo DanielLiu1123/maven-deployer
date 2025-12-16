@@ -241,8 +241,7 @@ public class DeployTask extends DefaultTask {
     }
 
     /**
-     * Extracts the deploymentState from the status response body.
-     * Expected format: {"deploymentId":"uuid","deploymentState":"STATE",...}
+     * @see <a href="https://central.sonatype.org/publish/publish-portal-api/#verify-status-of-the-deployment">Verify Status of the Deployment</a>
      */
     private DeploymentState extractDeploymentState(String responseBody) {
         Pattern pattern = Pattern.compile("\"deploymentState\"\\s*:\\s*\"([^\"]+)\"");
