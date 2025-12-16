@@ -87,12 +87,12 @@ export MAVENCENTRAL_PASSWORD=your_password
 ### Deploy Release
 
 ```shell
-# Step 1: Stage artifacts
+# Step 1: Stage artifacts and sign
 export GPG_SECRET_KEY=$(< path/to/private.gpg)
 export GPG_PASSPHRASE=your_passphrase
 ./gradlew publish -Pversion=1.0.0
 
-# Step 2: Sign and upload to Maven Central
+# Step 2: Upload
 export MAVENCENTRAL_USERNAME=your_username
 export MAVENCENTRAL_PASSWORD=your_password
 ./gradlew deploy
