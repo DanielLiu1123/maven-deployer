@@ -45,7 +45,7 @@ public class DeployTask extends DefaultTask {
     }
 
     @TaskAction
-    private void deploy() throws Exception {
+    public void deploy() throws Exception {
         List<Path> dirPaths =
                 extension.getDirs().get().stream().map(File::toPath).toList();
         if (dirPaths.isEmpty()) {
