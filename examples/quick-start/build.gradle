@@ -10,7 +10,7 @@ dependencies {
 }
 
 deploy {
-    dirs = [ file("${project.layout.buildDirectory}/repo") ]
+    dirs = [ project.layout.buildDirectory.dir("repo").get().getAsFile() ]
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
     publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
