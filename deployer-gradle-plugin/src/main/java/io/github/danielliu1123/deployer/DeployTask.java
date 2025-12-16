@@ -16,11 +16,14 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.Project;
+import org.gradle.api.logging.Logger;
 import org.gradle.api.tasks.TaskAction;
 
 /**
@@ -32,11 +35,13 @@ public class DeployTask extends DefaultTask {
 
     private final DeployerPluginExtension extension;
     private final File projectDir;
+    private final Logger logger;
 
     @Inject
     public DeployTask(Project project, DeployerPluginExtension extension) {
         this.extension = extension;
         this.projectDir = project.getProjectDir();
+        this.logger = getLogger();
     }
 
     @TaskAction
@@ -48,13 +53,13 @@ public class DeployTask extends DefaultTask {
         List<Path> dirPaths =
                 extension.getDirs().get().stream().map(File::toPath).toList();
         if (dirPaths.isEmpty()) {
-            System.out.println("No dirs configured for deploying. Skipping.");
+            logger.lifecycle("No dirs configured for deploying. Skipping.");
             return;
         }
 
-        System.out.println("Configured dirs:");
+        logger.lifecycle("Configured dirs:");
         for (Path dirPath : dirPaths) {
-            System.out.println("  - " + dirPath);
+            logger.lifecycle("  - " + dirPath);
         }
 
         // package artifacts into a zip file
@@ -62,7 +67,7 @@ public class DeployTask extends DefaultTask {
         var bundlePath = Path.of(projectDir.getAbsolutePath(), bundleName);
         File zipFile = createBundle(dirPaths, bundlePath);
 
-        System.out.println("Deploy bundle: " + zipFile.getAbsolutePath());
+        logger.lifecycle("Deploy bundle: " + zipFile.getAbsolutePath());
 
         doDeploy(zipFile);
     }
@@ -81,10 +86,16 @@ public class DeployTask extends DefaultTask {
 
         byte[] bodyBytes = createMultipartBody(partHeaders, fileBytes, endBoundary);
 
-        var url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
-                .formatted(getPublishingType().name());
+        // For WAIT_FOR_PUBLISHED, upload with USER_MANAGED and then poll status
+        PublishingType publishingType = getPublishingType();
+        String uploadPublishingType = publishingType == PublishingType.WAIT_FOR_PUBLISHED
+                ? PublishingType.USER_MANAGED.name()
+                : publishingType.name();
 
-        System.out.println("Deploying to URL: " + url);
+        var url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
+                .formatted(uploadPublishingType);
+
+        logger.lifecycle("Deploying to URL: " + url);
 
         var request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -96,10 +107,26 @@ public class DeployTask extends DefaultTask {
         var httpClient = HttpClient.newHttpClient();
         var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-        System.out.println("Response: ");
-        System.out.println("  status: " + response.statusCode());
-        System.out.println("  body: " + response.body());
-        System.out.println("  headers: " + response.headers().map());
+        logger.lifecycle("Response: ");
+        logger.lifecycle("  status: " + response.statusCode());
+        logger.lifecycle("  body: " + response.body());
+        logger.lifecycle("  headers: " + response.headers().map());
+
+        // If WAIT_FOR_PUBLISHED, extract deploymentId and poll until PUBLISHED
+        if (publishingType == PublishingType.WAIT_FOR_PUBLISHED) {
+            if (response.statusCode() == 201) {
+                String deploymentId = extractDeploymentId(response.body());
+                if (deploymentId != null) {
+                    waitForPublished(httpClient, deploymentId);
+                } else {
+                    logger.lifecycle(
+                            "Warning: Could not extract deploymentId from response. Cannot wait for PUBLISHED status.");
+                }
+            } else {
+                logger.lifecycle("Warning: Upload failed with status " + response.statusCode()
+                        + ". Cannot wait for PUBLISHED status.");
+            }
+        }
     }
 
     private PublishingType getPublishingType() {
@@ -155,5 +182,80 @@ public class DeployTask extends DefaultTask {
         System.arraycopy(endBytes, 0, result, headerBytes.length + fileBytes.length, endBytes.length);
 
         return result;
+    }
+
+    /**
+     * Extracts the deploymentId from the upload response body.
+     * Expected format: {"deploymentId":"uuid","deploymentName":"filename",...}
+     */
+    private String extractDeploymentId(String responseBody) {
+        Pattern pattern = Pattern.compile("\"deploymentId\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher matcher = pattern.matcher(responseBody);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    /**
+     * Polls the deployment status until it reaches PUBLISHED state.
+     * According to API docs, possible states are:
+     * PENDING, VALIDATING, VALIDATED, PUBLISHING, PUBLISHED, FAILED
+     */
+    private void waitForPublished(HttpClient httpClient, String deploymentId) throws Exception {
+        logger.lifecycle("\nWaiting for deployment to be PUBLISHED (deploymentId: " + deploymentId + ")...");
+
+        String statusUrl = "https://central.sonatype.com/api/v1/publisher/status?id=" + deploymentId;
+        int pollIntervalSeconds = 10;
+        int maxAttempts = 1080; // 3 hours max (1080 * 10 seconds)
+        int attempts = 0;
+
+        while (attempts < maxAttempts) {
+            attempts++;
+
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create(statusUrl))
+                    .header("Authorization", "Bearer " + getAuth())
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                logger.warn("Status check failed with code " + response.statusCode() + ": " + response.body());
+                Thread.sleep(pollIntervalSeconds * 1000L);
+                continue;
+            }
+
+            String state = extractDeploymentState(response.body());
+            logger.lifecycle("  [" + attempts + "] Current state: " + state);
+
+            if ("PUBLISHED".equals(state)) {
+                logger.lifecycle("\n✓ Deployment successfully PUBLISHED and available on Maven Central!");
+                return;
+            } else if ("FAILED".equals(state)) {
+                logger.error("\n✗ Deployment FAILED. Response: {}", response.body());
+                throw new RuntimeException("Deployment failed with state: FAILED");
+            }
+
+            // Continue polling for other states: PENDING, VALIDATING, VALIDATED, PUBLISHING
+            Thread.sleep(pollIntervalSeconds * 1000L);
+        }
+
+        throw new RuntimeException("Timeout waiting for deployment to be PUBLISHED after "
+                + (maxAttempts * pollIntervalSeconds / 60) + " minutes");
+    }
+
+    /**
+     * Extracts the deploymentState from the status response body.
+     * Expected format: {"deploymentId":"uuid","deploymentState":"STATE",...}
+     */
+    private String extractDeploymentState(String responseBody) {
+        Pattern pattern = Pattern.compile("\"deploymentState\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher matcher = pattern.matcher(responseBody);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return "UNKNOWN";
     }
 }
