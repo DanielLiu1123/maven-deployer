@@ -70,8 +70,8 @@ public class DeployTask extends DefaultTask {
 
     private void doDeploy(File zipFile) throws Exception {
         switch (getPublishingType()) {
-            case AUTOMATIC -> uploadBundle(zipFile, PublishingType.AUTOMATIC);
             case USER_MANAGED -> uploadBundle(zipFile, PublishingType.USER_MANAGED);
+            case AUTOMATIC -> uploadBundle(zipFile, PublishingType.AUTOMATIC);
             case WAIT_FOR_PUBLISHED -> {
                 var resp = uploadBundle(zipFile, PublishingType.AUTOMATIC);
                 if (is2xx(resp.statusCode())) {
@@ -201,6 +201,7 @@ public class DeployTask extends DefaultTask {
         int maxAttempts = 1080; // 3 hours max (1080 * 10 seconds)
         int attempts = 0;
         var httpClient = HttpClient.newBuilder().build();
+        var startTime = System.currentTimeMillis();
 
         while (attempts < maxAttempts) {
             attempts++;
@@ -219,18 +220,24 @@ public class DeployTask extends DefaultTask {
                 continue;
             }
 
+            var endTime = System.currentTimeMillis();
             var state = extractDeploymentState(response.body());
             logger.lifecycle("  [" + attempts + "] Current state: " + state);
 
             switch (state) {
                 case PENDING, VALIDATING, VALIDATED, PUBLISHING -> Thread.sleep(pollIntervalSeconds * 1000L);
                 case PUBLISHED -> {
-                    logger.lifecycle("\n✓ Deployment successfully PUBLISHED and available on Maven Central!");
+                    var minutes = (endTime - startTime) / 1000 / 60;
+                    var seconds = (endTime - startTime) / 1000 % 60;
+                    logger.lifecycle("\n✓ [ %dm%ds ] Deployment successfully PUBLISHED and available on Maven Central!"
+                            .formatted(minutes, seconds));
                     return;
                 }
-                case FAILED ->
+                case FAILED -> {
+                    logger.error("\n✗ Deployment FAILED. Response: {}", response.body());
                     throw new IllegalStateException(
                             "Deployment failed with state: FAILED, response: " + response.body());
+                }
                 case UNRECOGNIZED ->
                     throw new IllegalStateException("Unrecognized deployment state. Response: " + response.body());
             }
