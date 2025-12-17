@@ -51,7 +51,7 @@ public abstract class DeployerPluginExtension {
         result.append("  \"dirs\": ");
         List<File> dirList = dirs.isPresent() ? dirs.get() : Collections.emptyList();
         if (dirList.isEmpty()) {
-            result.append("[]");
+            result.append("[],\n");
         } else {
             result.append("[\n");
             for (int i = 0; i < dirList.size(); i++) {
