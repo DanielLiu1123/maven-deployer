@@ -36,12 +36,14 @@ public class DeployTask extends DefaultTask {
     private final DeployerPluginExtension extension;
     private final File projectDir;
     private final Logger logger;
+    private final HttpClient httpClient;
 
     @Inject
     public DeployTask(Project project, DeployerPluginExtension extension) {
         this.extension = extension;
         this.projectDir = project.getProjectDir();
         this.logger = getLogger();
+        this.httpClient = HttpClient.newBuilder().build();
     }
 
     @TaskAction
@@ -115,9 +117,6 @@ public class DeployTask extends DefaultTask {
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
                 .build();
-
-        var httpClient = HttpClient.newBuilder().build();
-
         var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         logger.lifecycle("Response: ");
@@ -200,7 +199,6 @@ public class DeployTask extends DefaultTask {
         int pollIntervalSeconds = 10;
         int maxAttempts = 1080; // 3 hours max (1080 * 10 seconds)
         int attempts = 0;
-        var httpClient = HttpClient.newBuilder().build();
         var startTime = System.currentTimeMillis();
 
         while (attempts < maxAttempts) {
@@ -211,7 +209,6 @@ public class DeployTask extends DefaultTask {
                     .header("Authorization", "Bearer " + getAuth())
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build();
-
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (!is2xx(response.statusCode())) {
