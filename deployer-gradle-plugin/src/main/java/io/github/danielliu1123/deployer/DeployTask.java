@@ -229,7 +229,7 @@ public class DeployTask extends DefaultTask {
                 case PUBLISHED -> {
                     var minutes = (endTime - startTime) / 1000 / 60;
                     var seconds = (endTime - startTime) / 1000 % 60;
-                    logger.lifecycle("\n✓ [ %dm%ds ] Deployment successfully PUBLISHED and available on Maven Central!"
+                    logger.lifecycle("%n✓ [ %dm%ds ] Deployment successfully PUBLISHED and available on Maven Central!"
                             .formatted(minutes, seconds));
                     return;
                 }
