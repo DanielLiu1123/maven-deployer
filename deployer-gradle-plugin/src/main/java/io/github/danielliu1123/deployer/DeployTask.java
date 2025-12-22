@@ -1,8 +1,11 @@
 package io.github.danielliu1123.deployer;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.SequenceInputStream;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -13,7 +16,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -36,6 +41,7 @@ public class DeployTask extends DefaultTask {
     private final DeployerPluginExtension extension;
     private final File projectDir;
     private final Logger logger;
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
     @Inject
     public DeployTask(Project project, DeployerPluginExtension extension) {
@@ -97,12 +103,7 @@ public class DeployTask extends DefaultTask {
         // multipart body: headers + file bytes + end boundary
         String partHeaders = "--" + boundary + "\r\n" + "Content-Disposition: form-data; name=bundle; filename="
                 + zipFile.getName() + "\r\n" + "Content-Type: application/octet-stream\r\n\r\n";
-
-        byte[] fileBytes = Files.readAllBytes(zipFile.toPath());
-
         String endBoundary = "\r\n--" + boundary + "--\r\n";
-
-        byte[] bodyBytes = createMultipartBody(partHeaders, fileBytes, endBoundary);
 
         var url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
                 .formatted(publishingType.name());
@@ -113,10 +114,9 @@ public class DeployTask extends DefaultTask {
                 .uri(URI.create(url))
                 .header("Authorization", "Bearer " + getAuth())
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
+                .POST(createMultipartBody(partHeaders, zipFile.toPath(), endBoundary))
                 .build();
 
-        var httpClient = HttpClient.newHttpClient();
         var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         logger.lifecycle("Response: ");
@@ -173,16 +173,20 @@ public class DeployTask extends DefaultTask {
         return zipFile;
     }
 
-    private static byte[] createMultipartBody(String headers, byte[] fileBytes, String endBoundary) {
-        byte[] headerBytes = headers.getBytes(StandardCharsets.UTF_8);
-        byte[] endBytes = endBoundary.getBytes(StandardCharsets.UTF_8);
-
-        byte[] result = new byte[headerBytes.length + fileBytes.length + endBytes.length];
-        System.arraycopy(headerBytes, 0, result, 0, headerBytes.length);
-        System.arraycopy(fileBytes, 0, result, headerBytes.length, fileBytes.length);
-        System.arraycopy(endBytes, 0, result, headerBytes.length + fileBytes.length, endBytes.length);
-
-        return result;
+    private static HttpRequest.BodyPublisher createMultipartBody(String headers, Path file, String endBoundary) {
+        var headerBuffer = headers.getBytes(StandardCharsets.UTF_8);
+        var endBuffer = endBoundary.getBytes(StandardCharsets.UTF_8);
+        return HttpRequest.BodyPublishers.ofInputStream(() -> {
+            try {
+                var headerBytes = new ByteArrayInputStream(headerBuffer);
+                var endBytes = new ByteArrayInputStream(endBuffer);
+                var fileBytes = Files.newInputStream(file);
+                return new SequenceInputStream(
+                        Collections.enumeration(Arrays.asList(headerBytes, fileBytes, endBytes)));
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
     }
 
     /**
@@ -210,7 +214,6 @@ public class DeployTask extends DefaultTask {
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build();
 
-            var httpClient = HttpClient.newHttpClient();
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (!is2xx(response.statusCode())) {
