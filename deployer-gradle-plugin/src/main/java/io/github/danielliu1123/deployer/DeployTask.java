@@ -41,7 +41,6 @@ public class DeployTask extends DefaultTask {
     private final DeployerPluginExtension extension;
     private final File projectDir;
     private final Logger logger;
-    private final HttpClient httpClient = HttpClient.newHttpClient();
 
     @Inject
     public DeployTask(Project project, DeployerPluginExtension extension) {
@@ -117,6 +116,7 @@ public class DeployTask extends DefaultTask {
                 .POST(createMultipartBody(partHeaders, zipFile.toPath(), endBoundary))
                 .build();
 
+        var httpClient = HttpClient.newHttpClient();
         var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         logger.lifecycle("Response: ");
@@ -204,6 +204,7 @@ public class DeployTask extends DefaultTask {
         int maxAttempts = 1080; // 3 hours max (1080 * 10 seconds)
         int attempts = 0;
         var startTime = System.currentTimeMillis();
+        var httpClient = HttpClient.newHttpClient();
 
         while (attempts < maxAttempts) {
             attempts++;
