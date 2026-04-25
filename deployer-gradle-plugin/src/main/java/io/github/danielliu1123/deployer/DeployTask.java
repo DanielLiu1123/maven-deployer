@@ -30,12 +30,15 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.Project;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
 /**
  *
  *
  * @author Freeman
  */
+@DisableCachingByDefault(
+        because = "Uploading artifacts to Maven Central is a network side effect, not a cacheable operation")
 public class DeployTask extends DefaultTask {
 
     private final DeployerPluginExtension extension;

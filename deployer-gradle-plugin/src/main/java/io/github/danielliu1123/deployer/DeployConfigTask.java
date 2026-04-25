@@ -4,7 +4,9 @@ import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
+@DisableCachingByDefault(because = "Prints configuration to console, no cacheable output")
 public class DeployConfigTask extends DefaultTask {
 
     private final DeployerPluginExtension extension;
