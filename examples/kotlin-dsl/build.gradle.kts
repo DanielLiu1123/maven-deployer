@@ -12,7 +12,7 @@ dependencies {
 }
 
 deploy {
-    dirs = allprojects.map { it.layout.buildDirectory.dir("repo").get().asFile }.filter { it.exists() }
+    dirs = listOf(layout.buildDirectory.dir("repo").get().asFile)
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
     publishingType = PublishingType.WAIT_FOR_PUBLISHED

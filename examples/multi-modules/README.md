@@ -16,6 +16,7 @@ export MAVENCENTRAL_PASSWORD=your_password
 # Step 1: Stage artifacts
 export GPG_SECRET_KEY=$(< path/to/private.gpg)
 export GPG_PASSPHRASE=your_passphrase
+./gradlew :examples:multi-modules:clean
 ./gradlew :examples:multi-modules:publish -Pversion=1.0.0
 
 # Step 2: upload

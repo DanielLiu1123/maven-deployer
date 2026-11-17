@@ -13,7 +13,7 @@ public enum PublishingType {
     USER_MANAGED,
     /**
      * Wait for the deployment to be PUBLISHED (fully available on Maven Central).
-     * This option uploads the bundle with USER_MANAGED publishing type and then polls
+     * This option uploads the bundle with AUTOMATIC publishing type and then polls
      * the deployment status until it reaches PUBLISHED state.
      */
     WAIT_FOR_PUBLISHED

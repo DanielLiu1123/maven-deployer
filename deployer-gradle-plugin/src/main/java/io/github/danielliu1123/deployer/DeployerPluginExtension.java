@@ -15,6 +15,7 @@ import org.gradle.api.provider.Property;
 public abstract class DeployerPluginExtension {
 
     private final ListProperty<File> dirs;
+    private final Property<String> releaseVersion;
     private final Property<String> username;
     private final Property<String> password;
     private final Property<PublishingType> publishingType;
@@ -22,6 +23,7 @@ public abstract class DeployerPluginExtension {
     public DeployerPluginExtension(Project project) {
         ObjectFactory objects = project.getObjects();
         this.dirs = objects.listProperty(File.class);
+        this.releaseVersion = objects.property(String.class);
         this.username = objects.property(String.class);
         this.password = objects.property(String.class);
         this.publishingType = objects.property(PublishingType.class).convention(PublishingType.USER_MANAGED);
@@ -29,6 +31,13 @@ public abstract class DeployerPluginExtension {
 
     public ListProperty<File> getDirs() {
         return dirs;
+    }
+
+    /**
+     * Limits the bundle to staged Maven publications for this release version.
+     */
+    public Property<String> getReleaseVersion() {
+        return releaseVersion;
     }
 
     public Property<String> getUsername() {

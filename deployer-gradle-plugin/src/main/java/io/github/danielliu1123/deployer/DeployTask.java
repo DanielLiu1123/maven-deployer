@@ -2,7 +2,6 @@ package io.github.danielliu1123.deployer;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.SequenceInputStream;
 import java.io.UncheckedIOException;
@@ -15,11 +14,15 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,6 +30,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
+import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.tasks.TaskAction;
@@ -44,6 +48,9 @@ public class DeployTask extends DefaultTask {
     private final DeployerPluginExtension extension;
     private final File projectDir;
     private final Logger logger;
+    private URI publisherApi = URI.create("https://central.sonatype.com/api/v1/publisher/");
+    private int pollIntervalSeconds = 10;
+    private int maxPollAttempts = 1080;
 
     @Inject
     public DeployTask(Project project, DeployerPluginExtension extension) {
@@ -57,8 +64,8 @@ public class DeployTask extends DefaultTask {
         List<Path> dirPaths =
                 extension.getDirs().get().stream().map(File::toPath).toList();
         if (dirPaths.isEmpty()) {
-            logger.lifecycle("No dirs configured for deploying. Skipping.");
-            return;
+            throw new GradleException(
+                    "No artifact directories configured. Set deploy.dirs to the staged Maven repositories.");
         }
 
         logger.lifecycle("Configured dirs:");
@@ -69,7 +76,8 @@ public class DeployTask extends DefaultTask {
         // package artifacts into a zip file
         var bundleName = "%s-bundle.zip".formatted(projectDir.getName());
         var bundlePath = Path.of(projectDir.getAbsolutePath(), bundleName);
-        File zipFile = createBundle(dirPaths, bundlePath);
+        File zipFile =
+                createBundle(dirPaths, bundlePath, extension.getReleaseVersion().getOrNull());
 
         logger.lifecycle("Deploy bundle: " + zipFile.getAbsolutePath());
 
@@ -77,28 +85,25 @@ public class DeployTask extends DefaultTask {
     }
 
     private void doDeploy(File zipFile) throws Exception {
-        switch (getPublishingType()) {
-            case USER_MANAGED -> uploadBundle(zipFile, PublishingType.USER_MANAGED);
-            case AUTOMATIC -> uploadBundle(zipFile, PublishingType.AUTOMATIC);
-            case WAIT_FOR_PUBLISHED -> {
-                var resp = uploadBundle(zipFile, PublishingType.AUTOMATIC);
-                if (is2xx(resp.statusCode())) {
-                    String deploymentId = extractDeploymentId(resp.body());
-                    if (deploymentId != null && !deploymentId.isBlank()) {
-                        waitForPublished(deploymentId);
-                    } else {
-                        logger.lifecycle(
-                                "Warning: Could not extract deploymentId from response. Cannot wait for PUBLISHED status.");
-                    }
-                } else {
-                    logger.lifecycle("Warning: Upload failed with status " + resp.statusCode()
-                            + ". Cannot wait for PUBLISHED status.");
-                }
-            }
+        var mode = extension.getPublishingType().get();
+        var publishingType = mode == PublishingType.WAIT_FOR_PUBLISHED ? PublishingType.AUTOMATIC : mode;
+        var deploymentId = uploadBundle(zipFile, publishingType);
+        logger.lifecycle(
+                "Central Portal accepted the bundle (deployment ID: {}, publishing type: {}).",
+                deploymentId,
+                publishingType);
+        if (mode == PublishingType.WAIT_FOR_PUBLISHED) {
+            waitForPublished(deploymentId);
         }
     }
 
-    private HttpResponse<String> uploadBundle(File zipFile, PublishingType publishingType) throws Exception {
+    void configurePublisher(URI publisherApi, int pollIntervalSeconds, int maxPollAttempts) {
+        this.publisherApi = publisherApi;
+        this.pollIntervalSeconds = pollIntervalSeconds;
+        this.maxPollAttempts = maxPollAttempts;
+    }
+
+    private String uploadBundle(File zipFile, PublishingType publishingType) throws Exception {
         // random boundary
         String boundary = "----JavaBoundary" + UUID.randomUUID();
 
@@ -107,13 +112,12 @@ public class DeployTask extends DefaultTask {
                 + zipFile.getName() + "\r\n" + "Content-Type: application/octet-stream\r\n\r\n";
         String endBoundary = "\r\n--" + boundary + "--\r\n";
 
-        var url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=%s"
-                .formatted(publishingType.name());
+        var url = publisherApi.resolve("upload?publishingType=" + publishingType.name());
 
         logger.lifecycle("Deploying to URL: " + url);
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+                .uri(url)
                 .header("Authorization", "Bearer " + getAuth())
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(createMultipartBody(partHeaders, zipFile.toPath(), endBoundary))
@@ -122,19 +126,24 @@ public class DeployTask extends DefaultTask {
         var httpClient = HttpClient.newHttpClient();
         var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-        logger.lifecycle("Response: ");
-        logger.lifecycle("  status: " + response.statusCode());
-        logger.lifecycle("  body: " + response.body());
-        logger.lifecycle("  headers: " + response.headers().map());
-        return response;
+        if (!is2xx(response.statusCode())) {
+            throw new GradleException(
+                    "Central Portal rejected the bundle (HTTP " + response.statusCode() + "): " + response.body());
+        }
+        var deploymentId = response.body().strip();
+        try {
+            if (!UUID.fromString(deploymentId).toString().equalsIgnoreCase(deploymentId)) {
+                throw new IllegalArgumentException("Non-canonical UUID");
+            }
+        } catch (IllegalArgumentException e) {
+            throw new GradleException("Central Portal did not return a valid deployment ID (HTTP "
+                    + response.statusCode() + "). Check the Portal before uploading again.");
+        }
+        return deploymentId;
     }
 
     private static boolean is2xx(int i) {
         return i >= 200 && i < 300;
-    }
-
-    private PublishingType getPublishingType() {
-        return extension.getPublishingType().get();
     }
 
     private String getAuth() {
@@ -144,36 +153,73 @@ public class DeployTask extends DefaultTask {
         return Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static File createBundle(List<Path> paths, Path zipFilePath) {
+    private static File createBundle(List<Path> paths, Path zipFilePath, String releaseVersion) throws IOException {
+        if (releaseVersion != null
+                && (releaseVersion.isBlank()
+                        || releaseVersion.endsWith("-SNAPSHOT")
+                        || releaseVersion.contains("/")
+                        || releaseVersion.contains("\\"))) {
+            throw new GradleException("deploy.releaseVersion must be a Maven release version.");
+        }
+
+        // Resolve and validate every configured repository before writing the bundle.
+        List<List<Path>> artifacts = new ArrayList<>();
         for (Path path : paths) {
-            if (!Files.isDirectory(path)) {
-                throw new IllegalArgumentException("The provided path is not a directory: " + path);
+            artifacts.add(collectArtifacts(path, releaseVersion));
+        }
+
+        Files.deleteIfExists(zipFilePath);
+        try (var zip = new ZipOutputStream(Files.newOutputStream(zipFilePath, StandardOpenOption.CREATE_NEW))) {
+            for (int i = 0; i < paths.size(); i++) {
+                var root = paths.get(i);
+                for (var file : artifacts.get(i)) {
+                    var entryName = root.relativize(file).toString().replace(File.separatorChar, '/');
+                    zip.putNextEntry(new ZipEntry(entryName));
+                    Files.copy(file, zip);
+                    zip.closeEntry();
+                }
             }
         }
+        return zipFilePath.toFile();
+    }
 
-        // package all files from all directories into a single zip file
-        File zipFile = zipFilePath.toFile();
-        if (zipFile.exists() && !zipFile.delete()) {
-            throw new IllegalStateException("Failed to delete existing zip file: " + zipFile);
+    private static List<Path> collectArtifacts(Path root, String releaseVersion) throws IOException {
+        if (!Files.isDirectory(root)) {
+            throw new GradleException("Staged Maven repository does not exist or is not a directory: " + root);
         }
-
-        try (var zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile))) {
-            for (Path path : paths) {
-                Files.walkFileTree(path, new SimpleFileVisitor<>() {
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                        var zipEntry = new ZipEntry(path.relativize(file).toString());
-                        zipOutputStream.putNextEntry(zipEntry);
-                        Files.copy(file, zipOutputStream);
-                        zipOutputStream.closeEntry();
-                        return FileVisitResult.CONTINUE;
+        List<Path> files = new ArrayList<>();
+        Set<Path> releaseDirectories = new HashSet<>();
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (attrs.isRegularFile()) {
+                    files.add(file);
+                    var relativePath = root.relativize(file);
+                    int depth = relativePath.getNameCount();
+                    if (releaseVersion != null && depth >= 4) {
+                        var artifact = relativePath.getName(depth - 3);
+                        var version = relativePath.getName(depth - 2).toString();
+                        var filename = relativePath.getName(depth - 1).toString();
+                        if (version.equals(releaseVersion) && filename.equals(artifact + "-" + version + ".pom")) {
+                            releaseDirectories.add(file.getParent());
+                        }
                     }
-                });
+                }
+                return FileVisitResult.CONTINUE;
             }
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to zip artifacts from directories", e);
+        });
+
+        var selected = files.stream()
+                .filter(file -> releaseVersion == null || releaseDirectories.contains(file.getParent()))
+                .sorted()
+                .toList();
+        if (selected.isEmpty()) {
+            throw new GradleException(
+                    releaseVersion == null
+                            ? "No staged artifacts found in " + root
+                            : "No staged Maven publication found for release " + releaseVersion + " in " + root);
         }
-        return zipFile;
+        return selected;
     }
 
     private static HttpRequest.BodyPublisher createMultipartBody(String headers, Path file, String endBoundary) {
@@ -192,28 +238,19 @@ public class DeployTask extends DefaultTask {
         });
     }
 
-    /**
-     * see <a href="https://central.sonatype.org/publish/publish-portal-api/#uploading-a-deployment-bundle">Upload Bundle</a>
-     */
-    private static String extractDeploymentId(String responseBody) {
-        return responseBody;
-    }
-
     private void waitForPublished(String deploymentId) throws Exception {
         logger.lifecycle("\nWaiting for deployment to be PUBLISHED (deploymentId: " + deploymentId + ")...");
 
-        String statusUrl = "https://central.sonatype.com/api/v1/publisher/status?id=" + deploymentId;
-        int pollIntervalSeconds = 10;
-        int maxAttempts = 1080; // 3 hours max (1080 * 10 seconds)
+        var statusUrl = publisherApi.resolve("status?id=" + deploymentId);
         int attempts = 0;
         var startTime = System.currentTimeMillis();
         var httpClient = HttpClient.newHttpClient();
 
-        while (attempts < maxAttempts) {
+        while (attempts < maxPollAttempts) {
             attempts++;
 
             var request = HttpRequest.newBuilder()
-                    .uri(URI.create(statusUrl))
+                    .uri(statusUrl)
                     .header("Authorization", "Bearer " + getAuth())
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build();
@@ -249,8 +286,8 @@ public class DeployTask extends DefaultTask {
             }
         }
 
-        throw new RuntimeException("Timeout waiting for deployment to be PUBLISHED after "
-                + (maxAttempts * pollIntervalSeconds / 60) + " minutes");
+        throw new GradleException("Timeout waiting for deployment " + deploymentId + " to be PUBLISHED after "
+                + maxPollAttempts + " status checks.");
     }
 
     /**

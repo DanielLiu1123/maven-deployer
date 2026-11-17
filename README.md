@@ -9,6 +9,8 @@ Publish snapshot and release follow different workflows:
 
 ## Quick Start
 
+List the staging directories of the modules you intend to publish. The example uses `:library`. For a single-project build, use the root project's `layout.buildDirectory`.
+
 Apply the plugin to your _root_ `build.gradle`:
 
 ```groovy
@@ -18,10 +20,8 @@ plugins {
 
 deploy {
     // dirs to upload, they will all be packaged into one bundle
-    dirs = subprojects.stream()
-            .map(e -> e.layout.buildDirectory.dir("repo").get().getAsFile())
-            .filter(e -> e.exists())
-            .toList()
+    dirs = [project(":library").layout.buildDirectory.dir("repo").get().asFile]
+    releaseVersion = providers.gradleProperty("releaseVersion").orElse("")
     username = System.getenv("MAVENCENTRAL_USERNAME")
     password = System.getenv("MAVENCENTRAL_PASSWORD")
     publishingType = io.github.danielliu1123.deployer.PublishingType.AUTOMATIC
@@ -93,13 +93,18 @@ export MAVENCENTRAL_PASSWORD=your_password
 # Step 1: Stage artifacts and sign
 export GPG_SECRET_KEY=$(< path/to/private.gpg)
 export GPG_PASSPHRASE=your_passphrase
+./gradlew clean
 ./gradlew publish -Pversion=1.0.0
 
 # Step 2: Upload
 export MAVENCENTRAL_USERNAME=your_username
 export MAVENCENTRAL_PASSWORD=your_password
-./gradlew deploy
+./gradlew deploy -PreleaseVersion=1.0.0
 ```
+
+`releaseVersion` limits the bundle to that version in every configured repository. Each repository must contain a matching staged POM. If you omit `releaseVersion` from the plugin configuration, `deploy` bundles all files in the configured repositories.
+
+`AUTOMATIC` reports when Central Portal accepts the bundle. Set `publishingType` to `WAIT_FOR_PUBLISHED` to wait for Central Portal to confirm publication.
 
 ## GitHub Actions Setup
 
